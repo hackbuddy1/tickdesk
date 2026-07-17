@@ -48,3 +48,23 @@ Query plan confirms chunk exclusion: a 5-minute window touches 1 of 7 chunks
 (Bitmap Index Scan on ticks_symbol_ts_idx, 1.24 ms execution).
 
 Redis cache comparison: see Hour 3-6.
+
+### API latency (200 req, 10 concurrent, 1000-row payload / 92 KB)
+
+| Stage | p50 | p99 | mean |
+|---|---|---|---|
+| Redis cache, dict round-trip | 72.26 ms | 120.34 ms | 72.36 ms |
+| Redis cache, pre-serialized bytes | 8.88 ms | 56.60 ms | 16.10 ms |
+| Improvement | 8.1x | 2.1x | 4.5x |
+
+Adding Redis alone did not move p50. Profiling showed the bottleneck was not the
+database (a cached single request still took 7.9 ms, vs 1.5 ms for a 10-row
+payload) but double JSON conversion: Redis bytes were parsed into a dict, then
+re-serialized by FastAPI. Caching pre-serialized bytes and returning them
+directly removed both conversions. Remaining p99 reflects genuine cache misses
+plus asyncpg statement warmup.
+
+## Run
+
+    docker compose up -d
+    ./run.sh              # backend on :8000
