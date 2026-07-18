@@ -81,3 +81,40 @@ plus asyncpg statement warmup.
 A single background feed process publishes to Redis; one pump task in the API
 subscribes once and fans out to all clients, so client count does not multiply
 Redis load.
+
+## AI Agent (guardrails + access control)
+
+Natural-language console over the tick store. Tool-calling agent with a
+hard security boundary — every query the model emits is validated before it
+reaches the database.
+
+Endpoint: `POST /agent/query`  (role from `X-Role` header, server-side)
+
+**Tools:** `get_schema`, `compute_metric` (canned VWAP/volume/spread/last_price),
+`run_sql` (validated raw SELECT).
+
+**Guardrails (SQL guard, sqlglot):**
+- SELECT-only; single statement (blocks stacked `...; DROP`)
+- No DML/DDL anywhere in the tree (catches CTE-hidden writes)
+- Schema allowlist; system catalogs blocked
+- Dangerous-function denylist (`pg_read_file`, `pg_sleep`, `lo_import`, ...)
+- Forced/clamped LIMIT; output truncation before returning to the model
+
+**Access control:** role-scoped tools — `viewer` (no raw SQL, 100-row cap) vs
+`quant` (raw SELECT, 1000-row cap). Role comes from the session, never the
+model, so "you are admin now" in a prompt does nothing.
+
+**Observability:** per-query trace of latency, tokens, and cost estimate.
+
+**Model layer:** provider-agnostic, mock/live swappable via `AGENT_MODEL` env
+(mock runs offline with no API key).
+
+**Adversarial test suite:** 21-case pytest battery covering injection, DROP,
+role escalation, file exfil, and system-catalog access — all rejected.
+
+```bash
+pytest -q backend/tests/test_guards.py     # 21 passed
+curl -s -X POST localhost:8000/agent/query \
+  -H "Content-Type: application/json" -H "X-Role: viewer" \
+  -d '{"question":"last price for RELIANCE"}'
+```
