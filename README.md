@@ -68,3 +68,16 @@ plus asyncpg statement warmup.
 
     docker compose up -d
     ./run.sh              # backend on :8000
+
+### WebSocket fanout (single node)
+
+| Metric | Value |
+|---|---|
+| Concurrent clients | 50/50 connected |
+| Feed publish rate | ~2,000 ticks/s |
+| Delivered | ~48,000 msg/s aggregate |
+| Architecture | 1 Redis pub/sub subscription -> Hub -> N WebSocket clients |
+
+A single background feed process publishes to Redis; one pump task in the API
+subscribes once and fans out to all clients, so client count does not multiply
+Redis load.

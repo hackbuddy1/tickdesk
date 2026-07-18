@@ -159,3 +159,66 @@ async def flush():
         await db.rds.delete(k)
         n += 1
     return {"flushed": n}
+
+
+import asyncio
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+FEED_CHANNEL = "td:feed"
+
+
+class Hub:
+    def __init__(self):
+        self.clients: set[WebSocket] = set()
+        self.task: asyncio.Task | None = None
+
+    async def join(self, ws: WebSocket):
+        await ws.accept()
+        self.clients.add(ws)
+        if self.task is None or self.task.done():
+            self.task = asyncio.create_task(self.pump())
+
+    def leave(self, ws: WebSocket):
+        self.clients.discard(ws)
+
+    async def pump(self):
+        psub = db.rds.pubsub()
+        await psub.subscribe(FEED_CHANNEL)
+        try:
+            async for m in psub.listen():
+                if m["type"] != "message":
+                    continue
+                if not self.clients:
+                    break
+                dead = []
+                for ws in list(self.clients):
+                    try:
+                        await ws.send_bytes(m["data"])
+                    except Exception:
+                        dead.append(ws)
+                for ws in dead:
+                    self.clients.discard(ws)
+        finally:
+            await psub.unsubscribe(FEED_CHANNEL)
+            await psub.aclose()
+
+
+hub = Hub()
+
+
+@app.websocket("/ws/feed")
+async def ws_feed(ws: WebSocket):
+    await hub.join(ws)
+    try:
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        hub.leave(ws)
+
+
+@app.get("/stats/feed")
+async def feed_stats():
+    return {"clients": len(hub.clients), "pumping": hub.task is not None and not hub.task.done()}
