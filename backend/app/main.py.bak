@@ -222,13 +222,3 @@ async def ws_feed(ws: WebSocket):
 @app.get("/stats/feed")
 async def feed_stats():
     return {"clients": len(hub.clients), "pumping": hub.task is not None and not hub.task.done()}
-from app.agent.routes_agent import make_router as make_agent_router
-
-async def _agent_execute(sql: str):
-    async with db.pool.acquire() as con:
-        rows = await con.fetch(sql)
-        return [dict(r) for r in rows]
-
-
-app.include_router(make_agent_router(_agent_execute))
-
