@@ -1,0 +1,84 @@
+:root {
+  --bg: #0a0e14;
+  --panel: #111721;
+  --line: #1c2530;
+  --text: #c9d3df;
+  --dim: #5b6673;
+  --up: #26d07c;
+  --down: #ff5964;
+  --accent: #4da3ff;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+.app { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+h1 { font-size: 18px; margin: 0; letter-spacing: 0.5px; }
+
+.badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.badge.live { background: rgba(38,208,124,.15); color: var(--up); }
+.badge.connecting { background: rgba(77,163,255,.15); color: var(--accent); }
+.badge.disconnected, .badge.error { background: rgba(255,89,100,.15); color: var(--down); }
+
+.tape {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tape th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tape td {
+  padding: 5px 12px;
+  border-bottom: 1px solid rgba(28,37,48,.5);
+}
+
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dim { color: var(--dim); }
+.sym { color: var(--accent); font-weight: 600; }
+.price { font-weight: 600; }
+
+tr.up .price { color: var(--up); }
+tr.down .price { color: var(--down); }
+
+@keyframes flash-up {
+  from { background: rgba(38,208,124,.18); }
+  to { background: transparent; }
+}
+@keyframes flash-down {
+  from { background: rgba(255,89,100,.18); }
+  to { background: transparent; }
+}
+tr.up { animation: flash-up 0.6s ease-out; }
+tr.down { animation: flash-down 0.6s ease-out; }
