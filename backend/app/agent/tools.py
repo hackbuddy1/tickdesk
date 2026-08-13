@@ -1,10 +1,3 @@
-"""Agent tools + dispatch.
-Guard ke upar do aur guardrails:
-  * dispatch() role tool-membership dobara check karta hai -> jailbroken model jo
-    tool uske paas nahi tha, execute nahi kar payega.
-  * compute_metric params validate karta hai (symbol regex, int window), phir bhi
-    SQL guard se guzarta hai (belt + suspenders).
-Output model ko wapas jaane se pehle truncate hota hai."""
 from __future__ import annotations
 import re
 from typing import Awaitable, Callable, List, Dict, Any
@@ -18,7 +11,6 @@ Executor = Callable[[str], Awaitable[List[Dict[str, Any]]]]
 _SYMBOL_RE = re.compile(r"^[A-Z0-9.\-]{1,12}$")
 MAX_ROWS_TO_MODEL = 200
 
-# canned safe metrics. {sym} regex-validated, {w} int-cast, tab templating.
 _METRICS = {
     "last_price": "SELECT symbol, price, ts FROM ticks "
                   "WHERE symbol='{sym}' ORDER BY ts DESC LIMIT 1",
@@ -74,7 +66,6 @@ class Tools:
         self._execute = execute
 
     async def dispatch(self, name: str, args: dict) -> Any:
-        # access control: jo tool role ke paas nahi, refuse — model ne jo bhi kiya ho.
         if name not in self.role.tools:
             return {"error": f"role '{self.role.name}' is not permitted to use '{name}'"}
         try:
