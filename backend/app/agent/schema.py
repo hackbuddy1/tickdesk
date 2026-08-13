@@ -1,6 +1,3 @@
-"""Agent kaun se tables dekh/query kar sakta hai -- single source of truth.
-Allowlist explicit hai, introspection se discover NAHI hota."""
-
 SCHEMA = {
     "ticks": {
         "description": "raw trade prints (~5M rows), TimescaleDB hypertable on ts",
