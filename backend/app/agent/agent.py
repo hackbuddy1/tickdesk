@@ -1,6 +1,3 @@
-"""Agent loop: model <-> tools, har run pe observability trace.
-AGENT_MODEL=mock (default) -> mock client, bina API key/network ke chalega.
-AGENT_MODEL=real -> asli Anthropic (ANTHROPIC_API_KEY chahiye)."""
 from __future__ import annotations
 import os, time
 from dataclasses import dataclass, field
