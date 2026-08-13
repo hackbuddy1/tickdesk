@@ -1,12 +1,7 @@
-"""Mock LLM client — asli Anthropic messages.create() jaisa interface deta hai,
-par LLM ke bajaye keyword rules se tool decide karta hai. Tools/guard/roles/DB
-sab real chalte hain; sirf 'dimaag' scripted hai. Isse bina API key/network ke
-poora agent loop + adversarial tests deterministically chalte hain."""
 from __future__ import annotations
 from dataclasses import dataclass
 
 
-# --- Anthropic response shape ki nakal (jitna agent.py ko chahiye) ---
 @dataclass
 class _Text:
     text: str
@@ -33,10 +28,9 @@ class _Resp:
 
 class MockMessages:
     async def create(self, *, model, max_tokens, system, tools, messages):
-        tool_names = {t["name"] for t in tools}
-        # aakhri user turn ka text nikaalo
+        tool_names = {t["name"] for t in tools}  
         last = messages[-1]
-        # agar pichhla turn tool_result tha -> ab final answer do
+      
         if isinstance(last.get("content"), list) and \
            any(isinstance(b, dict) and b.get("type") == "tool_result" for b in last["content"]):
             note = _summarize(last["content"])
@@ -44,7 +38,7 @@ class MockMessages:
 
         q = _text_of(messages[0]["content"]).lower()
 
-        # --- adversarial: pehle refuse karo (chahe tool available ho) ---
+     
         bad = ("drop", "delete", "truncate", "/etc/passwd", "pg_read_file",
                "pg_sleep", "admin", "escalat", "ignore your instructions", "users table")
         if any(b in q for b in bad):
@@ -54,7 +48,7 @@ class MockMessages:
                        "or touch anything outside them.")],
                 "end_turn", _Usage(80, 30))
 
-        # --- normal routing ---
+      
         if ("schema" in q or "column" in q) and "get_schema" in tool_names:
             return _tool("get_schema", {}, tool_names)
 
@@ -85,7 +79,7 @@ class MockAnthropic:
 
 # --- helpers ---
 def _tool(name, inp, tool_names):
-    if name not in tool_names:  # role ke paas ye tool nahi -> agent dispatch refuse karega
+    if name not in tool_names:  
         return _Resp([_ToolUse("t1", name, inp)], "tool_use", _Usage(90, 25))
     return _Resp([_ToolUse("t1", name, inp)], "tool_use", _Usage(90, 25))
 
@@ -99,12 +93,12 @@ def _guess_symbol(q):
     stop = {"WHAT","THE","VWAP","FOR","IS","OF","IN","ME","GIVE","GET",
             "SHOW","AND","A","AN","LAST","PRICE","VOLUME","RANGE","SPREAD",
             "AVG","AVERAGE","LATEST","CURRENT","HFT","SQL","TOP"}
-    # question ke original case se tokens lo; sirf all-caps ya title-case symbols
+   
     for tok in re.findall(r"[A-Za-z]{1,6}", q):
         up = tok.upper()
         if up in stop:
             continue
-        # AAPL, MSFT jaise tickers usually upper ya first-letter-cap hote hain
+     
         if tok.isupper() or tok[0].isupper():
             return up
     return "AAPL"
