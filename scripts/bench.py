@@ -22,12 +22,12 @@ def pct(xs, p):
 
 def report(name, lat):
     print(f"\n{name}")
-    print(f"  n      {len(lat)}")
-    print(f"  mean   {statistics.mean(lat):7.2f} ms")
-    print(f"  p50    {pct(lat, 50):7.2f} ms")
-    print(f"  p95    {pct(lat, 95):7.2f} ms")
-    print(f"  p99    {pct(lat, 99):7.2f} ms")
-    print(f"  max    {max(lat):7.2f} ms")
+    print(f"n{len(lat)}")
+    print(f"mean{statistics.mean(lat):7.2f} ms")
+    print(f"p50{pct(lat, 50):7.2f} ms")
+    print(f"p95{pct(lat, 95):7.2f} ms")
+    print(f"p99{pct(lat, 99):7.2f} ms")
+    print(f"max{max(lat):7.2f} ms")
 
 
 async def hit(client, sym, sem, lat):
