@@ -135,9 +135,9 @@ async def spread(start: datetime = Query(...), end: datetime = Query(...)):
             rows = await con.fetch(
                 """
                 SELECT symbol,
-                       avg(ask - bid)              AS avg_spread,
-                       avg((ask - bid) / price)    AS avg_rel_spread,
-                       count(*)                    AS n
+                       avg(ask - bid) AS avg_spread,
+                       avg((ask - bid) / price) AS avg_rel_spread,
+                       count(*) AS n
                 FROM ticks
                 WHERE ts >= $1 AND ts <= $2
                 GROUP BY symbol
