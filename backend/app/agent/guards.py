@@ -21,28 +21,31 @@ _SYSTEM_SCHEMAS = {"pg_catalog", "information_schema", "pg_toast"}
 
 
 class SQLGuardError(Exception):
-    """reject hone pe raise. message dikhana safe hai."""
+    """Raise msg if rejected."""
 
 
 def validate_and_rewrite(sql: str, allowed_tables: set[str], max_limit: int = MAX_LIMIT) -> str:
-   
+
+    # Layer 1
     try:
         statements = [s for s in sqlglot.parse(sql, dialect="postgres") if s is not None]
     except ParseError as e:
         raise SQLGuardError(f"could not parse SQL: {str(e).splitlines()[0]}")
 
-   
+   # Layer 2
     if len(statements) != 1:
         raise SQLGuardError("only a single statement is allowed")
     stmt = statements[0]
-
+    
+   # Layer 3
     for node_type in FORBIDDEN_NODES:
         if stmt.find(node_type) is not None:
             raise SQLGuardError(f"'{node_type.__name__.upper()}' is not allowed")
-
+   # Layer 4
     if not isinstance(stmt, (exp.Select, exp.Union)):
         raise SQLGuardError("only SELECT queries are allowed")
-
+        
+   # Layer 5
     cte_names = {cte.alias for cte in stmt.find_all(exp.CTE)}
     for table in stmt.find_all(exp.Table):
         if table.name in cte_names:
@@ -51,11 +54,13 @@ def validate_and_rewrite(sql: str, allowed_tables: set[str], max_limit: int = MA
             raise SQLGuardError("system catalog access is not allowed")
         if table.name not in allowed_tables:
             raise SQLGuardError(f"table '{table.name}' is not accessible")
-
+            
+   # Layer 6
     for fn in stmt.find_all(exp.Anonymous):
         if (fn.name or "").lower() in DANGEROUS_FUNCS:
             raise SQLGuardError(f"function '{fn.name}' is not allowed")
-
+            
+   # Layer 7
     stmt = _enforce_limit(stmt, max_limit)
     return stmt.sql(dialect="postgres")
 
