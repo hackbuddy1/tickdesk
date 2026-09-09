@@ -1,6 +1,7 @@
 services:
   db:
-    image: timescale/timescaledb:latest-pg16
+    build:
+      context: ./db
     container_name: tickdesk-db
     environment:
       POSTGRES_USER: tick
