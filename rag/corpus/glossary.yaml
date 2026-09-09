@@ -1,0 +1,69 @@
+- term: VWAP
+  aliases: [volume weighted average price, weighted average price, avg weighted price]
+  definition: Average price weighted by traded quantity over a window.
+  sql_hint: SUM(price * qty) / NULLIF(SUM(qty), 0)
+
+- term: spread
+  aliases: [bid ask spread, bid-ask, quoted spread]
+  definition: Difference between best ask and best bid at a point in time.
+  sql_hint: AVG(ask - bid) over a ts-filtered range in ticks
+
+- term: notional
+  aliases: [traded value, turnover, rupee value, dollar volume]
+  definition: Monetary value traded, price times quantity summed.
+  sql_hint: SUM(price * qty)
+
+- term: fill rate
+  aliases: [execution rate, hit rate]
+  definition: Share of orders that got at least partially executed.
+  sql_hint: COUNT(*) FILTER (WHERE status IN ('FILLED','PARTIAL'))::float / COUNT(*)
+
+- term: intraday high
+  aliases: [day high, high of day, session high]
+  definition: Highest traded price within a single session.
+  sql_hint: MAX(high) FROM bars_1s with a bucket range filter
+
+- term: most active
+  aliases: [top traded, busiest, highest volume]
+  definition: Ranked by total traded quantity, descending.
+  sql_hint: ORDER BY SUM(qty) DESC
+
+- term: net position
+  aliases: [net qty, exposure, holding]
+  definition: Signed quantity held. Positive is long, negative is short.
+  sql_hint: positions_eod.net_qty, use ABS() when ranking by size
+
+- term: average execution price
+  aliases: [avg fill price, achieved price]
+  definition: Volume-weighted mean of fill prices. Not a plain average.
+  sql_hint: SUM(f.price * f.qty) / NULLIF(SUM(f.qty), 0) FROM fills f
+
+- term: partial fill
+  aliases: [partially filled, incomplete fill]
+  definition: Order where executed quantity is less than requested quantity.
+  sql_hint: orders.status = 'PARTIAL'
+
+- term: rejection rate
+  aliases: [reject rate, rejected orders]
+  definition: Share of submitted orders rejected by the venue.
+  sql_hint: COUNT(*) FILTER (WHERE status = 'REJECTED')::float / COUNT(*)
+
+- term: desk
+  aliases: [trading desk, team]
+  definition: Business unit an account belongs to.
+  sql_hint: accounts.desk, joined via orders.account_id
+
+- term: ex-date
+  aliases: [ex date, ex dividend date, effective date]
+  definition: Date from which a corporate action takes effect.
+  sql_hint: corporate_actions.ex_date
+
+- term: mid price
+  aliases: [midpoint, mid]
+  definition: Midpoint between best bid and best ask.
+  sql_hint: (bid + ask) / 2.0
+
+- term: fees paid
+  aliases: [commission, brokerage, transaction cost]
+  definition: Total commission charged on executions.
+  sql_hint: SUM(fee) FROM fills

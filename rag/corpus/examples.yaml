@@ -1,0 +1,157 @@
+# --- simple filters / single table ---
+- question: What was the last traded price for AAPL?
+  sql: |
+    SELECT symbol, price, ts FROM ticks
+    WHERE symbol = 'AAPL' ORDER BY ts DESC LIMIT 1;
+
+- question: List all instruments on NASDAQ
+  sql: |
+    SELECT symbol, name, sector FROM instruments
+    WHERE exchange = 'NASDAQ' ORDER BY symbol;
+
+- question: Show me the trading desks
+  sql: |
+    SELECT account_id, name, desk FROM accounts ORDER BY account_id;
+
+# --- aggregation ---
+- question: What is the average bid-ask spread for MSFT over the last 10 minutes?
+  sql: |
+    SELECT symbol, AVG(ask - bid) AS avg_spread FROM ticks
+    WHERE symbol = 'MSFT' AND ts > now() - interval '10 minutes'
+    GROUP BY symbol;
+
+- question: How many orders did each desk submit?
+  sql: |
+    SELECT a.desk, COUNT(*) AS orders
+    FROM orders o JOIN accounts a USING (account_id)
+    GROUP BY a.desk ORDER BY orders DESC;
+
+- question: Total fees paid per symbol
+  sql: |
+    SELECT symbol, SUM(fee) AS total_fees
+    FROM fills GROUP BY symbol ORDER BY total_fees DESC;
+
+# --- VWAP / glossary-driven ---
+- question: What is the VWAP for TSLA over the last 5 minutes?
+  sql: |
+    SELECT symbol, SUM(price * qty) / NULLIF(SUM(qty), 0) AS vwap
+    FROM ticks
+    WHERE symbol = 'TSLA' AND ts > now() - interval '5 minutes'
+    GROUP BY symbol;
+
+- question: What was our average execution price for NVDA?
+  sql: |
+    SELECT symbol, SUM(price * qty) / NULLIF(SUM(qty), 0) AS avg_exec_price
+    FROM fills WHERE symbol = 'NVDA' GROUP BY symbol;
+
+- question: What is the total notional we traded today?
+  sql: |
+    SELECT SUM(price * qty) AS notional FROM fills
+    WHERE ts >= date_trunc('day', now());
+
+# --- time series / bars ---
+- question: Show the 1-second candles for AMZN in the last two minutes
+  sql: |
+    SELECT bucket, open, high, low, close, volume FROM bars_1s
+    WHERE symbol = 'AMZN' AND bucket > now() - interval '2 minutes'
+    ORDER BY bucket;
+
+- question: What was GOOG's intraday high today?
+  sql: |
+    SELECT MAX(high) AS intraday_high FROM bars_1s
+    WHERE symbol = 'GOOG' AND bucket >= date_trunc('day', now());
+
+- question: Give me 1-minute candles for META over the last hour
+  sql: |
+    SELECT time_bucket('1 minute', bucket) AS minute,
+           FIRST(open, bucket) AS open, MAX(high) AS high,
+           MIN(low) AS low, LAST(close, bucket) AS close, SUM(volume) AS volume
+    FROM bars_1s
+    WHERE symbol = 'META' AND bucket > now() - interval '1 hour'
+    GROUP BY minute ORDER BY minute;
+
+# --- ranking ---
+- question: Which 5 symbols were most actively traded in the last hour?
+  sql: |
+    SELECT symbol, SUM(qty) AS volume FROM ticks
+    WHERE ts > now() - interval '1 hour'
+    GROUP BY symbol ORDER BY volume DESC LIMIT 5;
+
+- question: Top 3 accounts by executed notional
+  sql: |
+    SELECT a.name, SUM(f.price * f.qty) AS notional
+    FROM fills f
+    JOIN orders o ON o.order_id = f.order_id
+    JOIN accounts a ON a.account_id = o.account_id
+    GROUP BY a.name ORDER BY notional DESC LIMIT 3;
+
+- question: Which symbols have the widest average spread?
+  sql: |
+    SELECT symbol, AVG(ask - bid) AS avg_spread FROM ticks
+    WHERE ts > now() - interval '30 minutes'
+    GROUP BY symbol ORDER BY avg_spread DESC LIMIT 10;
+
+# --- multi-table joins ---
+- question: How much volume did we execute per sector?
+  sql: |
+    SELECT i.sector, SUM(f.qty) AS executed_qty
+    FROM fills f JOIN instruments i USING (symbol)
+    GROUP BY i.sector ORDER BY executed_qty DESC;
+
+- question: Which desk trades the most Technology names?
+  sql: |
+    SELECT a.desk, COUNT(*) AS orders
+    FROM orders o
+    JOIN accounts a USING (account_id)
+    JOIN instruments i USING (symbol)
+    WHERE i.sector = 'Technology'
+    GROUP BY a.desk ORDER BY orders DESC;
+
+- question: Show buy versus sell executed quantity per symbol
+  sql: |
+    SELECT f.symbol, o.side, SUM(f.qty) AS qty
+    FROM fills f JOIN orders o ON o.order_id = f.order_id
+    GROUP BY f.symbol, o.side ORDER BY f.symbol, o.side;
+
+# --- order lifecycle ---
+- question: What is our fill rate by desk?
+  sql: |
+    SELECT a.desk,
+           COUNT(*) FILTER (WHERE o.status IN ('FILLED','PARTIAL'))::float
+             / NULLIF(COUNT(*), 0) AS fill_rate
+    FROM orders o JOIN accounts a USING (account_id)
+    GROUP BY a.desk ORDER BY fill_rate DESC;
+
+- question: How many orders were rejected, by symbol?
+  sql: |
+    SELECT symbol, COUNT(*) AS rejected FROM orders
+    WHERE status = 'REJECTED' GROUP BY symbol ORDER BY rejected DESC;
+
+- question: Which orders were only partially filled and by how much?
+  sql: |
+    SELECT o.order_id, o.symbol, o.qty AS requested,
+           COALESCE(SUM(f.qty), 0) AS executed
+    FROM orders o LEFT JOIN fills f ON f.order_id = o.order_id
+    WHERE o.status = 'PARTIAL'
+    GROUP BY o.order_id, o.symbol, o.qty
+    ORDER BY (o.qty - COALESCE(SUM(f.qty), 0)) DESC LIMIT 20;
+
+# --- positions & corporate actions ---
+- question: What are our largest net positions?
+  sql: |
+    SELECT p.as_of, a.name, p.symbol, p.net_qty, p.avg_cost
+    FROM positions_eod p JOIN accounts a USING (account_id)
+    ORDER BY ABS(p.net_qty) DESC LIMIT 10;
+
+- question: Which symbols have upcoming splits?
+  sql: |
+    SELECT symbol, ex_date, ratio FROM corporate_actions
+    WHERE action_type = 'SPLIT' AND ex_date >= CURRENT_DATE
+    ORDER BY ex_date;
+
+- question: Show dividends paid by Technology companies
+  sql: |
+    SELECT c.symbol, i.name, c.ex_date, c.cash_amount
+    FROM corporate_actions c JOIN instruments i USING (symbol)
+    WHERE c.action_type = 'DIVIDEND' AND i.sector = 'Technology'
+    ORDER BY c.ex_date DESC;

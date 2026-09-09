@@ -1,0 +1,343 @@
+# Golden set for NL->SQL evaluation.
+#
+# These questions must NOT appear in rag/corpus/examples.yaml. If a question
+# is in both, the retriever hands the model its own answer and accuracy
+# becomes meaningless.
+#
+# tables: which tables a correct answer must touch. Used for retrieval
+# recall@k, which is measured separately from execution accuracy so that
+# a retrieval miss can be told apart from a generation miss.
+
+- id: g001
+  question: Which desk has the highest rejection rate?
+  tables: [orders, accounts]
+  sql: |
+    SELECT a.desk,
+           COUNT(*) FILTER (WHERE o.status = 'REJECTED')::float
+             / NULLIF(COUNT(*), 0) AS rejection_rate
+    FROM orders o JOIN accounts a USING (account_id)
+    GROUP BY a.desk
+    ORDER BY rejection_rate DESC
+    LIMIT 1;
+
+- id: g002
+  question: What is the total value of everything we executed in Financials names?
+  tables: [fills, instruments]
+  sql: |
+    SELECT SUM(f.price * f.qty) AS notional
+    FROM fills f JOIN instruments i USING (symbol)
+    WHERE i.sector = 'Financials';
+
+- id: g003
+  question: Show me the five cheapest instruments by tick size
+  tables: [instruments]
+  sql: |
+    SELECT symbol, name, tick_size
+    FROM instruments
+    ORDER BY tick_size ASC, symbol
+    LIMIT 5;
+
+- id: g004
+  question: How much commission did the Macro desk pay?
+  tables: [fills, orders, accounts]
+  sql: |
+    SELECT SUM(f.fee) AS total_fees
+    FROM fills f
+    JOIN orders o ON o.order_id = f.order_id
+    JOIN accounts a ON a.account_id = o.account_id
+    WHERE a.desk = 'Macro';
+
+- id: g005
+  question: What was the volume weighted average price for TCS on the last trading day?
+  tables: [ticks]
+  sql: |
+    SELECT SUM(price * qty) / NULLIF(SUM(qty), 0) AS vwap
+    FROM ticks
+    WHERE symbol = 'TCS'
+      AND ts >= (SELECT date_trunc('day', MAX(ts)) FROM ticks);
+
+- id: g006
+  question: Which symbols do we hold short?
+  tables: [positions_eod]
+  sql: |
+    SELECT as_of, account_id, symbol, net_qty
+    FROM positions_eod
+    WHERE net_qty < 0
+    ORDER BY net_qty ASC;
+
+- id: g007
+  question: List every dividend with its ex-date
+  tables: [corporate_actions]
+  sql: |
+    SELECT symbol, ex_date, cash_amount
+    FROM corporate_actions
+    WHERE action_type = 'DIVIDEND'
+    ORDER BY ex_date;
+
+- id: g008
+  question: How many market orders versus limit orders did we send?
+  tables: [orders]
+  sql: |
+    SELECT order_type, COUNT(*) AS n
+    FROM orders
+    GROUP BY order_type
+    ORDER BY order_type;
+
+- id: g009
+  question: What is the widest the INFY spread got in the final hour of trading?
+  tables: [ticks]
+  sql: |
+    SELECT MAX(ask - bid) AS max_spread
+    FROM ticks
+    WHERE symbol = 'INFY'
+      AND ts > (SELECT MAX(ts) - interval '1 hour' FROM ticks);
+
+- id: g010
+  question: Which sector did we send the most orders in?
+  tables: [orders, instruments]
+  sql: |
+    SELECT i.sector, COUNT(*) AS n
+    FROM orders o JOIN instruments i USING (symbol)
+    GROUP BY i.sector
+    ORDER BY n DESC
+    LIMIT 1;
+- id: g011
+  question: What is the average fill size per desk?
+  tables: [fills, orders, accounts]
+  sql: |
+    SELECT a.desk, AVG(f.qty) AS avg_fill_qty
+    FROM fills f
+    JOIN orders o ON o.order_id = f.order_id
+    JOIN accounts a ON a.account_id = o.account_id
+    GROUP BY a.desk ORDER BY avg_fill_qty DESC;
+
+- id: g012
+  question: Which instruments have never been traded by us?
+  tables: [instruments, fills]
+  sql: |
+    SELECT i.symbol, i.name
+    FROM instruments i
+    WHERE NOT EXISTS (SELECT 1 FROM fills f WHERE f.symbol = i.symbol)
+    ORDER BY i.symbol;
+
+- id: g013
+  question: Break down our executed quantity by side and sector
+  tables: [fills, orders, instruments]
+  sql: |
+    SELECT i.sector, o.side, SUM(f.qty) AS qty
+    FROM fills f
+    JOIN orders o ON o.order_id = f.order_id
+    JOIN instruments i ON i.symbol = f.symbol
+    GROUP BY i.sector, o.side ORDER BY i.sector, o.side;
+
+- id: g014
+  question: What is the highest price TCS has traded at?
+  tables: [ticks]
+  sql: |
+    SELECT MAX(price) AS max_price FROM ticks WHERE symbol = 'TCS';
+
+- id: g015
+  question: How many distinct symbols has each desk traded?
+  tables: [orders, accounts]
+  sql: |
+    SELECT a.desk, COUNT(DISTINCT o.symbol) AS symbols
+    FROM orders o JOIN accounts a USING (account_id)
+    GROUP BY a.desk ORDER BY symbols DESC;
+
+- id: g016
+  question: Show the average lot size by sector
+  tables: [instruments]
+  sql: |
+    SELECT sector, AVG(lot_size) AS avg_lot
+    FROM instruments GROUP BY sector ORDER BY avg_lot DESC;
+
+- id: g017
+  question: Which accounts were opened before 2021?
+  tables: [accounts]
+  sql: |
+    SELECT account_id, name, desk, opened_on
+    FROM accounts WHERE opened_on < DATE '2021-01-01'
+    ORDER BY opened_on;
+
+- id: g018
+  question: What proportion of our orders were cancelled?
+  tables: [orders]
+  sql: |
+    SELECT COUNT(*) FILTER (WHERE status = 'CANCELLED')::float
+             / NULLIF(COUNT(*), 0) AS cancel_rate
+    FROM orders;
+
+- id: g019
+  question: For each symbol, how much did we request versus actually execute?
+  tables: [orders, fills]
+  sql: |
+    SELECT o.symbol,
+           SUM(o.qty) AS requested,
+           COALESCE(SUM(f.qty), 0) AS executed
+    FROM orders o LEFT JOIN fills f ON f.order_id = o.order_id
+    GROUP BY o.symbol ORDER BY o.symbol;
+
+- id: g020
+  question: List all corporate actions for Technology companies
+  tables: [corporate_actions, instruments]
+  sql: |
+    SELECT c.symbol, c.action_type, c.ex_date
+    FROM corporate_actions c JOIN instruments i USING (symbol)
+    WHERE i.sector = 'Technology' ORDER BY c.ex_date;
+
+- id: g021
+  question: What is our total cost basis per account?
+  tables: [positions_eod]
+  sql: |
+    SELECT account_id, SUM(net_qty * avg_cost) AS cost_basis
+    FROM positions_eod GROUP BY account_id ORDER BY account_id;
+
+- id: g022
+  question: Which symbol had the largest single trade print?
+  tables: [ticks]
+  sql: |
+    SELECT symbol, qty, price, ts FROM ticks
+    ORDER BY qty DESC LIMIT 1;
+
+- id: g023
+  question: Average bid ask spread per symbol across all data
+  tables: [ticks]
+  sql: |
+    SELECT symbol, AVG(ask - bid) AS avg_spread
+    FROM ticks GROUP BY symbol ORDER BY avg_spread DESC;
+
+- id: g024
+  question: How many orders has each account submitted, including accounts with none?
+  tables: [accounts, orders]
+  sql: |
+    SELECT a.account_id, a.name, COUNT(o.order_id) AS orders
+    FROM accounts a LEFT JOIN orders o USING (account_id)
+    GROUP BY a.account_id, a.name ORDER BY a.account_id;
+
+- id: g025
+  question: What was the closing price of the last bar for INFY?
+  tables: [bars_1s]
+  sql: |
+    SELECT symbol, bucket, close FROM bars_1s
+    WHERE symbol = 'INFY' ORDER BY bucket DESC LIMIT 1;
+
+- id: g026
+  question: Which symbols have a split coming up with ratio above 1?
+  tables: [corporate_actions]
+  sql: |
+    SELECT symbol, ex_date, ratio FROM corporate_actions
+    WHERE action_type = 'SPLIT' AND ratio > 1 ORDER BY ex_date;
+
+- id: g027
+  question: Total traded volume per symbol from the bars
+  tables: [bars_1s]
+  sql: |
+    SELECT symbol, SUM(volume) AS total_volume
+    FROM bars_1s GROUP BY symbol ORDER BY total_volume DESC;
+
+- id: g028
+  question: What is the average execution price we achieved per symbol?
+  tables: [fills]
+  sql: |
+    SELECT symbol, SUM(price * qty) / NULLIF(SUM(qty), 0) AS avg_exec_price
+    FROM fills GROUP BY symbol ORDER BY symbol;
+
+- id: g029
+  question: Which desk trades the widest range of sectors?
+  tables: [orders, accounts, instruments]
+  sql: |
+    SELECT a.desk, COUNT(DISTINCT i.sector) AS sectors
+    FROM orders o
+    JOIN accounts a ON a.account_id = o.account_id
+    JOIN instruments i ON i.symbol = o.symbol
+    GROUP BY a.desk ORDER BY sectors DESC;
+
+- id: g030
+  question: Show me every partially filled order with the shortfall
+  tables: [orders, fills]
+  sql: |
+    SELECT o.order_id, o.symbol, o.qty - COALESCE(SUM(f.qty), 0) AS shortfall
+    FROM orders o LEFT JOIN fills f ON f.order_id = o.order_id
+    WHERE o.status = 'PARTIAL'
+    GROUP BY o.order_id, o.symbol, o.qty
+    ORDER BY shortfall DESC LIMIT 20;
+
+- id: g031
+  question: How many instruments are there in each sector?
+  tables: [instruments]
+  sql: |
+    SELECT sector, COUNT(*) AS n FROM instruments
+    GROUP BY sector ORDER BY n DESC;
+
+- id: g032
+  question: What is the intraday high and low for HDFCBANK from the bars?
+  tables: [bars_1s]
+  sql: |
+    SELECT MAX(high) AS hi, MIN(low) AS lo FROM bars_1s
+    WHERE symbol = 'HDFCBANK';
+
+- id: g033
+  question: Which order type gets rejected more often?
+  tables: [orders]
+  sql: |
+    SELECT order_type,
+           COUNT(*) FILTER (WHERE status = 'REJECTED')::float
+             / NULLIF(COUNT(*), 0) AS rejection_rate
+    FROM orders GROUP BY order_type ORDER BY rejection_rate DESC;
+
+- id: g034
+  question: Total fees paid by each desk
+  tables: [fills, orders, accounts]
+  sql: |
+    SELECT a.desk, SUM(f.fee) AS fees
+    FROM fills f
+    JOIN orders o ON o.order_id = f.order_id
+    JOIN accounts a ON a.account_id = o.account_id
+    GROUP BY a.desk ORDER BY fees DESC;
+
+- id: g035
+  question: What is the net position across all accounts for each symbol?
+  tables: [positions_eod]
+  sql: |
+    SELECT symbol, SUM(net_qty) AS net_qty
+    FROM positions_eod GROUP BY symbol ORDER BY ABS(SUM(net_qty)) DESC;
+
+- id: g036
+  question: List instruments listed before 2010
+  tables: [instruments]
+  sql: |
+    SELECT symbol, name, listed_on FROM instruments
+    WHERE listed_on < DATE '2010-01-01' ORDER BY listed_on;
+
+- id: g037
+  question: How many ticks do we have per symbol?
+  tables: [ticks]
+  sql: |
+    SELECT symbol, COUNT(*) AS ticks FROM ticks
+    GROUP BY symbol ORDER BY ticks DESC;
+
+- id: g038
+  question: Which buy orders had a limit price above the tick price at the time?
+  tables: [orders]
+  sql: |
+    SELECT order_id, symbol, limit_price, qty
+    FROM orders
+    WHERE side = 'BUY' AND order_type = 'LIMIT' AND limit_price IS NOT NULL
+    ORDER BY limit_price DESC LIMIT 20;
+
+- id: g039
+  question: Average number of fills per filled order
+  tables: [orders, fills]
+  sql: |
+    SELECT COUNT(f.fill_id)::float / NULLIF(COUNT(DISTINCT o.order_id), 0) AS fills_per_order
+    FROM orders o JOIN fills f ON f.order_id = o.order_id
+    WHERE o.status = 'FILLED';
+
+- id: g040
+  question: Which symbols appear in positions but have no corporate actions?
+  tables: [positions_eod, corporate_actions]
+  sql: |
+    SELECT DISTINCT p.symbol FROM positions_eod p
+    WHERE NOT EXISTS (
+        SELECT 1 FROM corporate_actions c WHERE c.symbol = p.symbol
+    ) ORDER BY p.symbol;
